@@ -4,6 +4,10 @@ Each adapter talks to its provider's API directly over httpx (no vendor SDK).
 
 When no API key is configured (or AGENT_MODEL=mock), we return a deterministic
 MockClient so the entire pipeline runs offline.
+
+If the default provider's key is missing but another provider's key is present,
+we switch providers automatically so that setting only OPENAI_API_KEY (or only
+ANTHROPIC_API_KEY) still produces a real review.
 """
 
 from __future__ import annotations
@@ -34,6 +38,14 @@ from .types import (
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 
 
+def _client_for_provider(model: ModelSpec) -> ModelClient:
+    if model.provider == Provider.ANTHROPIC:
+        return AnthropicClient(model)
+    if model.provider == Provider.OPENAI:
+        return OpenAIClient(model)
+    raise ValueError(f'unknown model provider "{model.provider}"')
+
+
 def resolve_client(model: ModelSpec) -> ModelClient:
     if os.environ.get("AGENT_MODEL") == "mock" or model.provider == Provider.MOCK:
         return MockClient()
@@ -41,16 +53,23 @@ def resolve_client(model: ModelSpec) -> ModelClient:
     key_env = model.api_key_env or (
         "OPENAI_API_KEY" if model.provider == Provider.OPENAI else "ANTHROPIC_API_KEY"
     )
-    if not os.environ.get(key_env):
-        import warnings
-        warnings.warn(f"[agent] no {key_env} set — falling back to mock model client")
-        return MockClient()
+    if os.environ.get(key_env):
+        return _client_for_provider(model)
 
-    if model.provider == Provider.ANTHROPIC:
-        return AnthropicClient(model)
-    if model.provider == Provider.OPENAI:
-        return OpenAIClient(model)
-    raise ValueError(f'unknown model provider "{model.provider}"')
+    alt_provider = Provider.ANTHROPIC if model.provider == Provider.OPENAI else Provider.OPENAI
+    alt_key_env = "OPENAI_API_KEY" if alt_provider == Provider.OPENAI else "ANTHROPIC_API_KEY"
+    if os.environ.get(alt_key_env):
+        import warnings
+        warnings.warn(
+            f"[agent] no {key_env} set but {alt_key_env} found — using {alt_provider.value} provider"
+        )
+        return _client_for_provider(ModelSpec(
+            provider=alt_provider, model=model.model, base_url=model.base_url,
+        ))
+
+    import warnings
+    warnings.warn(f"[agent] no {key_env} set — falling back to mock model client")
+    return MockClient()
 
 
 # -- Mock --------------------------------------------------------------------

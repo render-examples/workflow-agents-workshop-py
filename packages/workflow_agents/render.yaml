@@ -1,11 +1,8 @@
 # workflow-agents. Web host (FastAPI) + managed Postgres.
 # Builds from the repo root so the uv workspaces resolve.
-#
-# The Workflow service is created separately with the Render CLI — see
-# workshop/participants/03-workflow-agents.md.
 
 projects:
-  - name: agents-workshop-workflows
+  - name: workflow-agents
     environments:
       - name: production
         databases:
@@ -32,7 +29,11 @@ projects:
                 sync: false
               - key: RENDER_WORKFLOW_SLUG
                 sync: false
-              - key: NODE_ENV
-                value: production
+              - key: ANTHROPIC_API_KEY
+                sync: false
+              - key: OPENAI_API_KEY
+                sync: false
+              - key: GITHUB_TOKEN
+                sync: false
               - key: PYTHON_VERSION
                 value: "3.12"

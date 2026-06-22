@@ -1,20 +1,17 @@
-# Render Workflow Agents Workshop (Python)
+# Render Workflow Agents — Python
 
-A hands-on workshop that deploys **one agentic code-review use case** across
+An example repo that deploys **one agentic code-review use case** across
 **three Render execution substrates**: an in-process web service, a web service
 plus queue-backed worker, and Render Workflows.
 
-You deploy the same multi-agent PR reviewer (`security`, `performance`, `ux`, then
-a `judge`) across progressively more durable execution models. Along the way, you
-open live Render URLs, inspect logs and traces in the Dashboard, and use local
-development for focused test loops.
+The same multi-agent PR reviewer (`security`, `performance`, `ux`, then a
+`judge`) runs across progressively more durable execution models. Along the way,
+you can inspect logs and traces in the Dashboard and use local development for
+focused test loops.
 
-The core idea stays the same from start to finish: the agent does not change. The
-substrate does.
+The core idea: the agent does not change. The substrate does.
 
-This is the Python port of [workflow-agents-workshop-ts](../workflow-agents-workshop-ts).
-
-For someone facilitating this workshop, start with [`workshop/facilitator-guide.md`](workshop/facilitator-guide.md).
+This is the Python sibling of [workflow-agents-workshop-ts](../workflow-agents-workshop-ts).
 
 ## The three patterns
 
@@ -46,7 +43,7 @@ uses a deterministic **mock** model, so live deploys and local tests still work.
 Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` for real reviews, or force the mock
 with `AGENT_MODEL=mock`.
 
-## Workshop path
+## Blueprints
 
 Patterns 1 and 2 use Blueprints:
 
@@ -61,22 +58,11 @@ Pattern 3 uses both:
 - [`packages/workflow_agents/render.yaml`](packages/workflow_agents/render.yaml) creates the web service and Postgres database
 - `render workflows create` creates the Workflow service
 - `render workflows start` triggers task runs
-- `render logs`, `render deploys`, and the Dashboard help learners inspect what ran
-
-## Interactive beats
-
-- **Session 1 — inspect the coordination.** In queue-agents, learners trace the ack
-  contract in [`packages/queue_agents/src/queue_agents/kv.py`](packages/queue_agents/src/queue_agents/kv.py),
-  run the focused test with `pytest tests/integration/test_queue_kv.py`, scale the
-  worker, and observe what they now own.
-- **Session 2 — let agents author tasks.** In workflow-agents, learners explore the
-  `your_review` sandbox and work with the `@app.task` API surface. The same
-  durability that took a whole queue in Session 1 is now a config object, a live
-  task run, and a Dashboard trace.
+- `render logs`, `render deploys`, and the Dashboard show what ran
 
 ## Local development
 
-Local runs are useful for tests, facilitator prep, and debugging.
+Local runs are useful for tests and debugging.
 
 For local runs, copy the example env file:
 
@@ -144,7 +130,7 @@ packages/
   workflow_agents/          Pattern 3: Render Workflows gateway + workflow service
                               → src/workflow_agents/server.py       dispatch workflows, GitHub webhooks
                               → src/workflow_agents/workflows/code_review.py   the finished pipeline as tasks
-                              → src/workflow_agents/workflows/your_review.py   sandbox for the hands-on finale
+                              → src/workflow_agents/workflows/your_review.py   starter template for custom reviews
 
 shared/
   agent/                    workshop-agent — LLM loop, agents, composable building blocks
@@ -159,8 +145,6 @@ shared/
   ui/                       workshop-ui — mountable FastAPI telemetry viewer
                               → src/workshop_ui/__init__.py        create_ui_router() + read APIs
                               → src/workshop_ui/templates/         dashboard HTML template
-
-workshop/                   guided walkthrough (00–05)
 
 tests/                      unit, integration, and e2e tests (mock model, no API key)
                               → integration/test_workflow_app.py   core pipeline end-to-end
@@ -234,8 +218,8 @@ pytest tests/integration        # per-pattern app + worker kv contract
 pytest tests/e2e                # end-to-end naive + workflow flows
 ```
 
-The `test_queue_kv` integration test is the red-to-green check for the Session 1
-exercise. It requires a local Valkey/Redis:
+The `test_queue_kv` integration test verifies the ack/retry contract. It requires
+a local Valkey/Redis:
 
 ```sh
 VALKEY_URL=redis://127.0.0.1:6379 pytest tests/integration/test_queue_kv.py -v
