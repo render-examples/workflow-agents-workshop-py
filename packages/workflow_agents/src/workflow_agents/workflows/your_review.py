@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from render_sdk import Retry, Workflows
+from render import Retry, TaskContext, Workflows
 from workshop_agent import (
     define_agent,
     extensions,
@@ -30,8 +30,6 @@ from workshop_agent.model_tiers import resolve_model_spec
 from workshop_agent.prepare_diff import PullRequest
 from workshop_agent.types import AgentDefinition, RunContext
 from workshop_db import store_tracer
-
-from . import step
 
 # ---------------------------------------------------------------------------
 # 1. Define a custom agent
@@ -86,6 +84,9 @@ If you find nothing, say so explicitly.""",
 # @app.task registers it automatically when workflow.py merges apps.
 # Retry gives you durable execution: if the LLM call fails, Render retries
 # in a fresh instance — no try/except or dead-letter queue.
+#
+# Every task takes a TaskContext first, then its own inputs. @app.task returns
+# a definition, not a callable — run it with await ctx.run(definition, ...).
 # ---------------------------------------------------------------------------
 
 app = Workflows(
@@ -96,10 +97,10 @@ app = Workflows(
 
 @app.task(name="my_reviewer", timeout_seconds=120)
 async def my_reviewer_task(
-    patches: list[dict[str, str]], run_id: str | None = None,
+    ctx: TaskContext, patches: list[dict[str, str]], run_id: str | None = None,
 ) -> dict[str, Any]:
-    ctx = RunContext(tracer=store_tracer(), run_id=run_id)
-    result = await my_reviewer.run({"patches": patches}, ctx)
+    agent_context = RunContext(tracer=store_tracer(), run_id=run_id)
+    result = await my_reviewer.run({"patches": patches}, agent_context)
     return {
         "text": result.text,
         "usage": {
@@ -114,7 +115,7 @@ async def my_reviewer_task(
 # ---------------------------------------------------------------------------
 
 @app.task(name="your_review", timeout_seconds=300)
-async def workflow_task(input: dict[str, Any]) -> dict[str, Any]:
+async def workflow_task(ctx: TaskContext, input: dict[str, Any]) -> dict[str, Any]:
     """The your-review workflow entry point."""
     url = input["url"]
     run_id = input.get("_runId")
@@ -123,7 +124,7 @@ async def workflow_task(input: dict[str, Any]) -> dict[str, Any]:
     filtered = filter_diff(all_patches)
     patches_dicts = [{"file": p.file, "diff": p.diff} for p in filtered.patches]
 
-    result = await step(my_reviewer_task)(patches_dicts, run_id)
+    result = await ctx.run(my_reviewer_task, patches_dicts, run_id)
 
     return {
         "url": url,
@@ -149,8 +150,8 @@ async def workflow_task(input: dict[str, Any]) -> dict[str, Any]:
 #
 #     import asyncio
 #     results = await asyncio.gather(
-#         step(my_reviewer_task)(patches_dicts, run_id),
-#         step(naming_reviewer_task)(patches_dicts, run_id),
+#         ctx.run(my_reviewer_task, patches_dicts, run_id),
+#         ctx.run(naming_reviewer_task, patches_dicts, run_id),
 #     )
 #
 # ▸ Add a judge step
@@ -159,7 +160,7 @@ async def workflow_task(input: dict[str, Any]) -> dict[str, Any]:
 #
 #     from .code_review import judge_task
 #     findings = [{"agent": "my-reviewer", "note": result["text"]}]
-#     decision = await step(judge_task)(findings, run_id)
+#     decision = await ctx.run(judge_task, findings, run_id)
 #
 # ▸ Try different tools
 #   The registry has: scan_for_secrets, diff_stats, contrast_ratio,
@@ -179,6 +180,6 @@ async def workflow_task(input: dict[str, Any]) -> dict[str, Any]:
 #   The per-agent tasks from code_review.py are already registered:
 #
 #     from .code_review import security_task
-#     review = await step(security_task)(patches_dicts, run_id)
+#     review = await ctx.run(security_task, patches_dicts, run_id)
 #
 # ---------------------------------------------------------------------------

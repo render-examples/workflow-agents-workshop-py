@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "render-sdk>=0.6",
+    "render>=1.0.1",
     "workshop-agent",
     "workshop-db",
     "workshop-ui",

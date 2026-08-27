@@ -7,17 +7,21 @@ the module name. The module name becomes the route name and the Render slug
 is derived as {service_name}/{module_name}.
 
 The gateway uses `mapping` to dispatch and `local_tasks` to run entry points
-in-process (entry points are unwrapped to their plain functions). The runner
-(workflow.py) merges `apps` into the single app it starts.
+in-process (through a LocalTaskContext, so subtasks run inline too). The
+runner (workflow.py) merges `apps` into the single app it starts.
 """
 
 from __future__ import annotations
 
 import importlib
 import pkgutil
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
+
+from render.workflows import TaskDefinition
+
+from . import local_task_context
 
 SKIP = {"loader", "__init__"}
 
@@ -27,7 +31,7 @@ class DiscoveredWorkflows:
 
     def __init__(self) -> None:
         self.mapping: dict[str, str] = {}
-        self.local_tasks: dict[str, Callable[..., Any]] = {}
+        self.local_tasks: dict[str, Callable[[Any], Awaitable[Any]]] = {}
         self.apps: list[Any] = []
 
 
@@ -46,10 +50,10 @@ def load_workflows(
         mod = importlib.import_module(
             f".{modname}", package="workflow_agents.workflows"
         )
-        task_fn = _find_task_export(mod)
-        if task_fn:
+        definition = _find_task_export(mod)
+        if definition:
             result.mapping[modname] = f"{workflow_slug}/{modname}"
-            result.local_tasks[modname] = task_fn
+            result.local_tasks[modname] = _local_runner(definition)
         app = getattr(mod, "app", None)
         if app is not None:
             result.apps.append(app)
@@ -57,11 +61,19 @@ def load_workflows(
     return result
 
 
-def _find_task_export(mod: Any) -> Callable[..., Any] | None:
+def _local_runner(definition: TaskDefinition) -> Callable[[Any], Awaitable[Any]]:
+    """Run an entry point and its subtasks in this process."""
+
+    async def run(input: Any) -> Any:
+        return await local_task_context.run(definition, input)
+
+    return run
+
+
+def _find_task_export(mod: Any) -> TaskDefinition | None:
+    """Find the module's entry point. @app.task returns a TaskDefinition."""
     for attr_name in ("workflow_task", "task", "run"):
         val = getattr(mod, attr_name, None)
-        if callable(val):
-            # @app.task returns a TaskCallable wrapper; unwrap to the plain
-            # function so in-process callers don't dispatch a subtask.
-            return getattr(val, "__wrapped__", val)
+        if isinstance(val, TaskDefinition):
+            return val
     return None

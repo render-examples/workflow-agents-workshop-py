@@ -3,27 +3,41 @@ Workflow modules. Each module defines its own `Workflows` app and decorates
 its tasks in place. `loader.py` auto-discovers the modules; `workflow.py`
 merges their apps with `Workflows.from_workflows` and starts the runner.
 
-`step()` is the one composition idiom: wrap a task at the call site so the
-same code runs everywhere.
+Every task takes a `TaskContext` as its first parameter. `@app.task` returns
+a `TaskDefinition`, which is not callable — reach a subtask through
+`await ctx.run(definition, *args)`.
 """
 
 from __future__ import annotations
 
-import os
-from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar
+
+from render import TaskContext
+
+if TYPE_CHECKING:
+    from render.workflows import TaskDefinition
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
-def step(task: Any) -> Callable[..., Any]:
+class LocalTaskContext(TaskContext):
     """
-    Resolve a task to the right callable for the current environment.
+    A TaskContext for running tasks in this process, without a Render
+    workflow environment.
 
-    Under the workflow runtime (production and `render workflows dev`,
-    where RENDER_SDK_MODE=run) return the decorated task itself, so each
-    call dispatches as its own Render subtask run. Everywhere else (tests,
-    the gateway's in-process mode) return the task's plain underlying
-    function, so it runs in-process.
+    `run` calls the target task's function directly instead of dispatching it
+    to its own instance, so the whole workflow runs inline. The gateway's
+    in-process mode and the tests use it.
     """
-    if os.environ.get("RENDER_SDK_MODE") == "run":
-        return task
-    return getattr(task, "__wrapped__", task)
+
+    async def run(
+        self, task: TaskDefinition[P, R], *args: P.args, **kwargs: P.kwargs
+    ) -> R:
+        result: Any = task.func(self, *args, **kwargs)
+        if hasattr(result, "__await__"):
+            return await result
+        return result
+
+
+local_task_context = LocalTaskContext()

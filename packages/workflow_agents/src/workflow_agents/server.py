@@ -44,11 +44,11 @@ async def create_app() -> FastAPI:
             fn = discovered.local_tasks.get(name)
             if not fn:
                 raise ValueError(f'no local task for workflow "{name}"')
-            return await fn(input) if asyncio.iscoroutinefunction(fn) else fn(input)
+            return await fn(input)
         slug = discovered.mapping.get(name)
         if not slug:
             raise ValueError(f'unknown workflow "{name}"')
-        from render_sdk import RenderAsync
+        from render import RenderAsync
 
         client = RenderAsync(token=os.environ.get("RENDER_API_KEY"))
         result = await client.workflows.run_task(slug, [input])
