@@ -249,7 +249,7 @@ skips:
   the old command stored on the service.
 - The mock model means the entire pipeline, all three patterns, and the full test
   suite run offline with zero credentials.
-- Pattern 3 uses the Render SDK (`render_sdk`). Each module in
+- Pattern 3 uses the Render SDK (`render`, version 1.0 or later). Each module in
   `src/workflow_agents/workflows/` defines its own `Workflows` app with its
   tasks decorated in place; the loader auto-discovers the modules and
   `workflow.py` merges the apps with `Workflows.from_workflows` — no manual

@@ -13,7 +13,7 @@ Usage:
 
 from __future__ import annotations
 
-from render_sdk import Workflows
+from render import Workflows
 
 from .workflows.loader import load_workflows
 
